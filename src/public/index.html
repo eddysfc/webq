@@ -7,20 +7,132 @@
 
   <body>
     <div id="auth"></div>
+    <div id="app"></div>
+
     <script>
-      fetch("/auth/status")
-        .then((res) => res.json())
-        .then((data) => {
-          const auth = document.getElementById("auth");
-          if (data.user) {
-            auth.innerHTML = `
-              <p>Logged in as ${data.user.username}</p>
-              <a href="/auth/logout">Logout</a>
-            `;
-          } else {
-            auth.innerHTML = `<a href="/auth/discord">Login with Discord</a>`;
-          }
+      let currentUser = null;
+
+      async function loadAuth() {
+        const res = await fetch("/auth/status");
+        const data = await res.json();
+        const auth = document.getElementById("auth");
+        if (data.user) {
+          currentUser = data.user;
+          auth.innerHTML = `
+                  <p>Logged in as ${data.user.username}</p>
+                  <a href="/auth/logout">Logout</a>
+                `;
+          startPolling();
+        } else {
+          auth.innerHTML = `<a href="/auth/discord">Login with Discord</a>`;
+          document.getElementById("app").innerHTML = "";
+        }
+      }
+
+      function renderQueueList(queues) {
+        if (queues.length === 0) {
+          document.getElementById("app").innerHTML =
+            "<p>No queues available.</p>";
+          return;
+        }
+        document.getElementById("app").innerHTML = `
+                <h2>Available Queues</h2>
+                <ul>
+                  ${queues
+                    .map(
+                      (q) => `
+                    <li>
+                      ${q.name} — ${q.length} in line
+                      <button onclick="joinQueue('${q.id}')">Join</button>
+                    </li>
+                  `,
+                    )
+                    .join("")}
+                </ul>
+              `;
+      }
+
+      function renderInQueue(status) {
+        const membersList = status.members
+          .map(
+            (m, i) =>
+              `<li>${m.username}${m.id === currentUser.id ? " (you)" : ""}</li>`,
+          )
+          .join("");
+
+        document.getElementById("app").innerHTML = `
+          <h2>${status.queueName}</h2>
+          <p>Your position: #${status.position + 1}</p>
+          <ol>${membersList}</ol>
+          <button onclick="leaveQueue()">Leave Queue</button>
+        `;
+      }
+
+      function renderMyTurn(status) {
+        const membersList = status.members
+          .map(
+            (m, i) =>
+              `<li>${m.username}${m.id === currentUser.id ? " (you)" : ""}</li>`,
+          )
+          .join("");
+
+        document.getElementById("app").innerHTML = `
+          <h2>${status.queueName}</h2>
+          <p>It's your turn!</p>
+          <ol>${membersList}</ol>
+          <button onclick="finish()">I'm done playing</button>
+        `;
+      }
+      async function joinQueue(queueId) {
+        const res = await fetch(`/api/queue/${queueId}/join`, {
+          method: "POST",
         });
+        const data = await res.json();
+        if (!data.ok) alert(data.error);
+        else poll();
+      }
+
+      async function leaveQueue() {
+        await fetch("/api/queue/leave", { method: "POST" });
+        poll();
+      }
+
+      async function finish() {
+        await fetch("/api/queue/finish", { method: "POST" });
+        poll();
+      }
+
+      async function poll() {
+        const res = await fetch("/api/queue/status");
+        const data = await res.json();
+
+        if (!data.user) {
+          location.reload();
+          return;
+        }
+
+        prevStatus = { inQueue: data.inQueue, isMyTurn: data.isMyTurn };
+
+        if (!data.inQueue) {
+          const queuesRes = await fetch("/api/queue");
+          const queues = await queuesRes.json();
+          renderQueueList(queues);
+        } else if (data.isMyTurn) {
+          renderMyTurn(data);
+        } else {
+          renderInQueue(data);
+        }
+      }
+
+      let pollInterval = null;
+
+      function startPolling() {
+        if (pollInterval) return;
+        poll();
+        pollInterval = setInterval(poll, 3000);
+      }
+
+      loadAuth();
     </script>
   </body>
 </html>

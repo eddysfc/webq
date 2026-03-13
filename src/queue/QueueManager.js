@@ -1,8 +1,12 @@
 import Queue from "./Queue.js";
 
+const AUTO_POP_MS = 15 * 60 * 1000;
+
 class QueueManager {
   constructor() {
     this.queues = new Map();
+    this.userQueueMap = new Map();
+    this.timers = new Map();
     this.nextId = 1;
   }
 
@@ -13,6 +17,12 @@ class QueueManager {
   }
 
   deleteQueue(queueId) {
+    const queue = this.queues.get(queueId);
+    if (!queue) return false;
+    for (const member of queue.members) {
+      this.userQueueMap.delete(member.id);
+      this._clearTimer(member.id);
+    }
     return this.queues.delete(queueId);
   }
 
@@ -22,6 +32,71 @@ class QueueManager {
 
   getAllQueues() {
     return Array.from(this.queues.values()).map((q) => q.toJSON());
+  }
+
+  join(queueId, user) {
+    if (this.userQueueMap.has(user.id))
+      return { ok: false, error: "Already in a queue" };
+    const queue = this.queues.get(queueId);
+    if (!queue) return { ok: false, error: "Queue not found" };
+    queue.push(user);
+    this.userQueueMap.set(user.id, queueId);
+    if (queue.peek().id === user.id) this._startTimer(user.id, queueId);
+    return { ok: true };
+  }
+
+  leave(userId) {
+    const queueId = this.userQueueMap.get(userId);
+    if (!queueId) return { ok: false, error: "Not in any queue" };
+    const queue = this.queues.get(queueId);
+    const wasFirst = queue.peek()?.id === userId;
+    queue.remove(userId);
+    this.userQueueMap.delete(userId);
+    this._clearTimer(userId);
+    if (wasFirst) this._startTimerForFront(queueId);
+    return { ok: true };
+  }
+
+  finish(userId) {
+    return this.leave(userId);
+  }
+
+  getStatus(userId) {
+    const queueId = this.userQueueMap.get(userId);
+    if (!queueId) return { inQueue: false };
+    const queue = this.queues.get(queueId);
+    const position = queue.getPosition(userId);
+    return {
+      inQueue: true,
+      queueId,
+      queueName: queue.name,
+      position,
+      isMyTurn: position === 0,
+      members: queue.members.map((m) => ({ id: m.id, username: m.username })),
+    };
+  }
+
+  _startTimerForFront(queueId) {
+    const queue = this.queues.get(queueId);
+    if (!queue) return;
+    const front = queue.peek();
+    if (front) this._startTimer(front.id, queueId);
+  }
+
+  _startTimer(userId, queueId) {
+    this._clearTimer(userId);
+    const handle = setTimeout(() => {
+      console.log(`Auto-popping ${userId} from queue ${queueId} after 15 min`);
+      this.leave(userId);
+    }, AUTO_POP_MS);
+    this.timers.set(userId, handle);
+  }
+
+  _clearTimer(userId) {
+    if (this.timers.has(userId)) {
+      clearTimeout(this.timers.get(userId));
+      this.timers.delete(userId);
+    }
   }
 }
 

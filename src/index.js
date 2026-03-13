@@ -5,6 +5,7 @@ import passport from "passport";
 import queueRouter from "./routes/queue.js";
 import authRouter from "./routes/auth.js";
 import adminRouter from "./routes/admin.js";
+import queueManager from "./queue/QueueManager.js";
 
 const app = express();
 const PORT = process.env.PORT;
@@ -25,6 +26,11 @@ app.use(passport.session());
 app.use("/api/queue", queueRouter);
 app.use("/auth", authRouter);
 app.use("/api/admin", adminRouter);
+
+// dev
+queueManager.createQueue("Machine 1");
+queueManager.createQueue("Machine 2");
+queueManager.createQueue("Machine 3");
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

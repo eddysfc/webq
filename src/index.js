@@ -8,7 +8,7 @@ import adminRouter from "./routes/admin.js";
 import queueManager from "./queue/QueueManager.js";
 
 const app = express();
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.static("src/public"));

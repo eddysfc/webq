@@ -1,0 +1,158 @@
+<!doctype html>
+<html>
+  <head>
+    <title>IRS WebQ — Admin</title>
+  </head>
+  <body>
+    <div id="auth"></div>
+    <div id="app"></div>
+
+    <script>
+      let currentUser = null;
+      let pollInterval = null;
+
+      async function loadAuth() {
+        const res = await fetch("/auth/status");
+        const data = await res.json();
+        const auth = document.getElementById("auth");
+        if (data.user) {
+          currentUser = data.user;
+          auth.innerHTML = `
+            <p>Logged in as ${data.user.username}</p>
+            <a href="/auth/logout">Logout</a>
+          `;
+          await checkAdmin();
+        } else {
+          auth.innerHTML = `<a href="/auth/discord">Login with Discord</a>`;
+          document.getElementById("app").innerHTML = "";
+        }
+      }
+
+      async function checkAdmin() {
+        const res = await fetch("/api/admin/queues");
+        if (res.status === 403) {
+          document.getElementById("app").innerHTML = "<p>Access denied.</p>";
+          return;
+        }
+        startPolling();
+      }
+
+      function startPolling() {
+        if (pollInterval) return;
+        poll();
+        pollInterval = setInterval(poll, 3000);
+      }
+
+      async function poll() {
+        const res = await fetch("/api/admin/queues");
+        if (!res.ok) return;
+        const queues = await res.json();
+        renderQueues(queues);
+      }
+
+      function renderQueues(queues) {
+        const app = document.getElementById("app");
+        app.innerHTML = `
+          <h2>Admin Panel</h2>
+
+          <h3>Create Queue</h3>
+          <input id="newQueueName" type="text" placeholder="Queue name" />
+          <button onclick="createQueue()">Create</button>
+
+          <h3>Queues</h3>
+          ${queues.length === 0 ? "<p>No queues.</p>" : queues.map(renderQueue).join("")}
+        `;
+      }
+
+      function renderQueue(q) {
+        const memberRows =
+          q.members.length === 0
+            ? "<li>Empty</li>"
+            : q.members
+                .map(
+                  (m, i) => `
+              <li>
+                ${i + 1}. ${m.username}
+                ${m.id.startsWith("walkin_") ? "<em>(walk-in)</em>" : ""}
+                <button onclick="removeUser('${q.id}', '${m.id}')">Remove</button>
+              </li>
+            `,
+                )
+                .join("");
+
+        return `
+          <div>
+            <h4>${q.name} (${q.length} in line)</h4>
+            <ul>${memberRows}</ul>
+
+            <input id="walkin_name_${q.id}" type="text" placeholder="Walk-in name" />
+            <button onclick="addWalkin('${q.id}')">Add Walk-in</button>
+
+            <br><br>
+            <button onclick="popFront('${q.id}')">Pop Front</button>
+            <button onclick="clearQueue('${q.id}')">Clear Queue</button>
+            <button onclick="deleteQueue('${q.id}')">Delete Queue</button>
+          </div>
+          <hr>
+        `;
+      }
+
+      async function createQueue() {
+        const name = document.getElementById("newQueueName").value.trim();
+        if (!name) return alert("Enter a queue name");
+        await fetch("/api/admin/queues", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        poll();
+      }
+
+      async function deleteQueue(queueId) {
+        if (!confirm("Delete this queue?")) return;
+        await fetch(`/api/admin/queues/${queueId}`, { method: "DELETE" });
+        poll();
+      }
+
+      async function addWalkin(queueId) {
+        const input = document.getElementById(`walkin_name_${queueId}`);
+        const username = input.value.trim();
+        if (!username) return alert("Enter a name");
+        const res = await fetch(`/api/admin/queues/${queueId}/add`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username }),
+        });
+        const data = await res.json();
+        if (!data.ok) alert(data.error);
+        else input.value = "";
+        poll();
+      }
+
+      async function removeUser(queueId, userId) {
+        await fetch(`/api/admin/queues/${queueId}/remove/${userId}`, {
+          method: "DELETE",
+        });
+        poll();
+      }
+
+      async function popFront(queueId) {
+        await fetch(`/api/admin/queues/${queueId}/pop`, { method: "POST" });
+        poll();
+      }
+
+      async function clearQueue(queueId) {
+        if (!confirm("Clear all users from this queue?")) return;
+        await fetch(`/api/admin/queues/${queueId}/clear`, { method: "POST" });
+        poll();
+      }
+
+      loadAuth();
+    </script>
+  </body>
+
+  <nav>
+    <a href="/">Home</a> |
+    <a href="/admin.html">Admin Panel</a>
+  </nav>
+</html>

@@ -18,6 +18,11 @@
         const auth = document.getElementById("auth");
         if (data.user) {
           currentUser = data.user;
+          fetch("/api/admin/queues").then((res) => {
+            if (res.ok)
+              document.getElementById("adminLink").innerHTML =
+                '| <a href="/admin.html">Admin Panel</a>';
+          });
           auth.innerHTML = `
                   <p>Logged in as ${data.user.username}</p>
                   <a href="/auth/logout">Logout</a>
@@ -135,4 +140,9 @@
       loadAuth();
     </script>
   </body>
+
+  <nav>
+    <a href="/">Home</a>
+    <span id="adminLink"></span>
+  </nav>
 </html>

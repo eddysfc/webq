@@ -1,100 +1,200 @@
 <!doctype html>
-
-<html>
+<html lang="en">
   <head>
     <title>IRS WebQ</title>
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
 
-  <body>
-    <div id="auth"></div>
-    <div id="app"></div>
+  <body class="bg-gray-100 min-h-screen">
+    <header class="bg-[#1D4A71] text-white mb-12">
+      <div class="relative flex items-center px-4 py-6 max-w-6xl mx-auto">
+        <a
+          class="flex items-center gap-3 hover:opacity-90 transition-opacity"
+          href="/"
+        >
+          <img
+            src="images/logo.png"
+            alt="Club logo"
+            class="h-12 w-auto"
+            onerror="this.style.display = 'none'"
+          />
+          <h1 class="text-3xl font-bold tracking-tight">IRS UIUC</h1>
+        </a>
+
+        <a
+          href="/admin.html"
+          id="adminNavLink"
+          class="hidden ml-4 md:ml-12 text-white/80 hover:text-white font-medium transition-colors text-xl"
+        >
+          Admin
+        </a>
+
+        <div class="ml-auto relative" id="authArea"></div>
+      </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 pb-12">
+      <div id="app"></div>
+    </main>
 
     <script>
       let currentUser = null;
+      let pollInterval = null;
 
       async function loadAuth() {
         const res = await fetch("/auth/status");
         const data = await res.json();
-        const auth = document.getElementById("auth");
+        const authArea = document.getElementById("authArea");
+
         if (data.user) {
           currentUser = data.user;
+
           fetch("/api/admin/queues").then((res) => {
             if (res.ok)
-              document.getElementById("adminLink").innerHTML =
-                '| <a href="/admin.html">Admin Panel</a>';
+              document
+                .getElementById("adminNavLink")
+                .classList.remove("hidden");
           });
-          auth.innerHTML = `
-                  <p>Logged in as ${data.user.username}</p>
-                  <a href="/auth/logout">Logout</a>
-                `;
+          authArea.innerHTML = `
+            <button
+              class="flex items-center gap-2 bg-white/10 hover:bg-white/20 transition-colors px-4 py-2 rounded-lg font-medium text-base"
+              onclick="this.parentElement.querySelector('.dropdown-menu').classList.toggle('hidden')"
+            >
+              <span>${data.user.username}</span>
+              <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+            <div class="dropdown-menu hidden absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-100 overflow-hidden z-10">
+              <a href="/auth/logout" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">Logout</a>
+            </div>
+          `;
+
           startPolling();
         } else {
-          auth.innerHTML = `<a href="/auth/discord">Login with Discord</a>`;
-          document.getElementById("app").innerHTML = "";
+          authArea.innerHTML = `
+            <a href="/auth/discord" class="bg-white/10 hover:bg-white/20 transition-colors px-4 py-2 rounded-lg font-medium text-base">
+              Login with Discord
+            </a>
+          `;
+          document.getElementById("app").innerHTML = `
+            <div class="text-center py-24">
+              <h2 class="text-2xl font-bold text-gray-700 mb-2">Welcome to IRS WebQ</h2>
+              <p class="text-gray-500 mb-6">Log in with Discord to join a queue.</p>
+              <a href="/auth/discord" class="inline-block bg-[#1D4A71] hover:bg-[#163a59] text-white font-semibold px-6 py-3 rounded-lg transition-colors">
+                Login with Discord
+              </a>
+            </div>
+          `;
         }
       }
+
+      document.addEventListener("click", (e) => {
+        if (!e.target.closest("#authArea")) {
+          document.querySelector(".dropdown-menu")?.classList.add("hidden");
+        }
+      });
 
       function renderQueueList(queues) {
         if (queues.length === 0) {
           document.getElementById("app").innerHTML =
-            "<p>No queues available.</p>";
+            `<p class="text-center text-gray-500 py-20">No queues available right now.</p>`;
           return;
         }
         document.getElementById("app").innerHTML = `
-    <h2>Available Queues</h2>
-    ${queues
-      .map((q) => {
-        const preview = q.members.slice(0, 5);
-        const previewList =
-          preview.length === 0
-            ? "<li>Empty</li>"
-            : preview.map((m, i) => `<li>${m.username}</li>`).join("");
-        const more = q.length > 5 ? `<li>...and ${q.length - 5} more</li>` : "";
-
-        return `
-        <div>
-          <h3>${q.name} — ${q.length} in line</h3>
-          <ol>${previewList}${more}</ol>
-          <button onclick="joinQueue('${q.id}')">Join</button>
-        </div>
-      `;
-      })
-      .join("")}
-  `;
+          <h2 class="text-xl font-bold text-gray-800 mb-6">Available Queues</h2>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            ${queues
+              .map((q) => {
+                const preview = q.members.slice(0, 5);
+                const previewList =
+                  preview.length === 0
+                    ? `<p class="text-gray-400 text-sm italic">Empty</p>`
+                    : preview
+                        .map(
+                          (m, i) => `
+                    <div class="flex items-center gap-2 text-sm text-gray-600">
+                      <span class="text-gray-400 w-4">${i + 1}.</span>
+                      <span>${m.username}</span>
+                    </div>
+                  `,
+                        )
+                        .join("");
+                const more =
+                  q.length > 5
+                    ? `<p class="text-xs text-gray-400 mt-1">+${q.length - 5} more</p>`
+                    : "";
+                return `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col gap-4">
+                  <div class="flex items-start justify-between">
+                    <h3 class="font-semibold text-gray-800 text-lg">${q.name}</h3>
+                    <span class="text-xs font-medium bg-[#1D4A71]/10 text-[#1D4A71] px-2 py-1 rounded-full">${q.length} in line</span>
+                  </div>
+                  <div class="flex flex-col gap-1">${previewList}${more}</div>
+                  <button onclick="joinQueue('${q.id}')"
+                    class="mt-auto w-full bg-[#1D4A71] hover:bg-[#163a59] text-white font-medium py-2 rounded-lg transition-colors">
+                    Join Queue
+                  </button>
+                </div>
+              `;
+              })
+              .join("")}
+          </div>
+        `;
       }
 
       function renderInQueue(status) {
         const membersList = status.members
           .map(
-            (m, i) =>
-              `<li>${m.username}${m.id === currentUser.id ? " (you)" : ""}</li>`,
+            (m, i) => `
+          <div class="flex items-center gap-2 text-sm py-1 ${m.id === currentUser.id ? "font-semibold text-[#1D4A71]" : "text-gray-600"}">
+            <span class="text-gray-400 w-4">${i + 1}.</span>
+            <span>${m.username}${m.id === currentUser.id ? " (you)" : ""}</span>
+          </div>
+        `,
           )
           .join("");
 
         document.getElementById("app").innerHTML = `
-          <h2>${status.queueName}</h2>
-          <p>Your position: #${status.position + 1}</p>
-          <ol>${membersList}</ol>
-          <button onclick="leaveQueue()">Leave Queue</button>
+          <div class="max-w-md mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="text-xl font-bold text-gray-800 mb-1">${status.queueName}</h2>
+            <p class="text-[#1D4A71] font-semibold mb-4">You are #${status.position + 1} in line</p>
+            <div class="flex flex-col mb-6">${membersList}</div>
+            <button onclick="leaveQueue()"
+              class="w-full border border-red-300 text-red-500 hover:bg-red-50 font-medium py-2 rounded-lg transition-colors">
+              Leave Queue
+            </button>
+          </div>
         `;
       }
 
       function renderMyTurn(status) {
         const membersList = status.members
           .map(
-            (m, i) =>
-              `<li>${m.username}${m.id === currentUser.id ? " (you)" : ""}</li>`,
+            (m, i) => `
+          <div class="flex items-center gap-2 text-sm py-1 ${m.id === currentUser.id ? "font-semibold text-[#1D4A71]" : "text-gray-600"}">
+            <span class="text-gray-400 w-4">${i + 1}.</span>
+            <span>${m.username}${m.id === currentUser.id ? " (you)" : ""}</span>
+          </div>
+        `,
           )
           .join("");
 
         document.getElementById("app").innerHTML = `
-          <h2>${status.queueName}</h2>
-          <p>It's your turn!</p>
-          <ol>${membersList}</ol>
-          <button onclick="finish()">I'm done playing</button>
+          <div class="max-w-md mx-auto bg-white rounded-xl shadow-sm border-2 border-[#1D4A71] p-6">
+            <div class="bg-[#1D4A71]/10 text-[#1D4A71] text-center font-bold text-lg rounded-lg py-3 mb-4">
+              It's your turn!
+            </div>
+            <h2 class="text-xl font-bold text-gray-800 mb-4">${status.queueName}</h2>
+            <div class="flex flex-col mb-6">${membersList}</div>
+            <button onclick="finish()"
+              class="w-full bg-[#1D4A71] hover:bg-[#163a59] text-white font-semibold py-2 rounded-lg transition-colors">
+              I'm done playing
+            </button>
+          </div>
         `;
       }
+
       async function joinQueue(queueId) {
         const res = await fetch(`/api/queue/${queueId}/join`, {
           method: "POST",
@@ -117,13 +217,10 @@
       async function poll() {
         const res = await fetch("/api/queue/status");
         const data = await res.json();
-
         if (!data.user) {
           location.reload();
           return;
         }
-
-        prevStatus = { inQueue: data.inQueue, isMyTurn: data.isMyTurn };
 
         if (!data.inQueue) {
           const queuesRes = await fetch("/api/queue");
@@ -136,8 +233,6 @@
         }
       }
 
-      let pollInterval = null;
-
       function startPolling() {
         if (pollInterval) return;
         poll();
@@ -147,9 +242,4 @@
       loadAuth();
     </script>
   </body>
-
-  <nav>
-    <a href="/">Home</a>
-    <span id="adminLink"></span>
-  </nav>
 </html>
